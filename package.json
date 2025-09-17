@@ -1,12 +1,16 @@
 {
-  "name": "my-v0-project",
+  "name": "fitplan-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:full": "concurrently \"npm run dev:backend\" \"npm run dev\"",
+    "setup": "cd backend && npm install && cd .. && npm install",
+    "seed": "cd backend && node src/scripts/seed.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -59,7 +63,8 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
-    "zod": "3.25.67"
+    "zod": "3.25.67",
+    "concurrently": "^9.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",

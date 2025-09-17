@@ -1,9 +1,37 @@
+"use client";
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowRight, Dumbbell, Target, TrendingUp } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/contexts/AuthContext"
 
 export default function LandingPage() {
+  const { user, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.push('/dashboard')
+    }
+  }, [user, loading, router])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <Dumbbell className="h-8 w-8 text-primary animate-pulse" />
+          <span className="text-xl font-bold">Loading...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (user) {
+    return null // Will redirect to dashboard
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/5">
       {/* Navigation */}
@@ -13,10 +41,10 @@ export default function LandingPage() {
           <span className="text-2xl font-bold text-foreground">FitPlan</span>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost">Dashboard</Button>
+          <Link href="/auth/login">
+            <Button variant="ghost">Sign In</Button>
           </Link>
-          <Link href="/dashboard">
+          <Link href="/auth/register">
             <Button>Get Started</Button>
           </Link>
         </div>
@@ -38,7 +66,7 @@ export default function LandingPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/dashboard">
+              <Link href="/auth/register">
                 <Button size="lg" className="text-lg px-8 py-6 group">
                   Start Your Plan
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -160,7 +188,7 @@ export default function LandingPage() {
           <p className="text-xl text-muted-foreground text-pretty">
             Join thousands of users who have already achieved their fitness goals with FitPlan.
           </p>
-          <Link href="/dashboard">
+          <Link href="/auth/register">
             <Button size="lg" className="text-lg px-12 py-6">
               Start Your Free Plan Today
             </Button>
