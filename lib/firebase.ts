@@ -22,6 +22,25 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+// Validate Firebase configuration
+const validateFirebaseConfig = () => {
+  const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+  const missingKeys = requiredKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig] || firebaseConfig[key as keyof typeof firebaseConfig] === 'your_firebase_api_key' || firebaseConfig[key as keyof typeof firebaseConfig]?.includes('your_'));
+  
+  if (missingKeys.length > 0) {
+    console.error('Firebase configuration is incomplete. Missing or placeholder values for:', missingKeys);
+    console.error('Please check your .env.local file and ensure all Firebase configuration values are set properly.');
+    console.error('See SETUP_INSTRUCTIONS.md for detailed setup instructions.');
+    return false;
+  }
+  return true;
+};
+
+// Check configuration on module load
+if (typeof window !== 'undefined') {
+  validateFirebaseConfig();
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
@@ -33,6 +52,10 @@ export const googleProvider = new GoogleAuthProvider();
 
 // Auth functions
 export const signUpWithEmailAndPassword = async (email: string, password: string, displayName?: string) => {
+  if (!validateFirebaseConfig()) {
+    throw new Error('Firebase configuration is incomplete. Please check your environment variables.');
+  }
+  
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   
   // Update display name if provided
@@ -53,7 +76,22 @@ export const signInWithEmailAndPasswordAuth = async (email: string, password: st
 };
 
 export const signInWithGoogle = async () => {
-  return await signInWithPopup(auth, googleProvider);
+  if (!validateFirebaseConfig()) {
+    throw new Error('Firebase configuration is incomplete. Please check your environment variables.');
+  }
+  
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (error: any) {
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error('Popup was blocked by the browser. Please allow popups for this site and try again.');
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('Sign-in was cancelled. Please try again.');
+    } else if (error.code === 'auth/configuration-not-found') {
+      throw new Error('Google authentication is not properly configured. Please check Firebase console settings.');
+    }
+    throw error;
+  }
 };
 
 export const signOutAuth = async () => {

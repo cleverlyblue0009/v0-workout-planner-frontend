@@ -90,8 +90,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (response.success && response.data?.user) {
             setUser(response.data.user);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('User sync failed:', error);
+          
+          // Provide more specific error information
+          if (error.message?.includes('fetch')) {
+            console.error('🌐 Backend Connection Issue: Cannot connect to backend server');
+            console.error('📝 Make sure the backend server is running on http://localhost:5000');
+            console.error('💡 Run: cd backend && npm run dev');
+          } else if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+            console.error('🔐 Authentication Issue: Firebase token validation failed');
+            console.error('📝 Check backend Firebase Admin SDK configuration');
+          }
+          
           // If sync fails, we still have Firebase user but no backend user
         }
       } else {
@@ -111,9 +122,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signUpWithEmailAndPassword(email, password, name);
       // The onAuthStateChanged will handle the rest
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign up failed:', error);
       setLoading(false);
+      
+      // Log specific error details for debugging
+      if (error.message?.includes('Firebase configuration is incomplete')) {
+        console.error('🔥 Firebase Configuration Issue:', error.message);
+        console.error('📝 Please check your .env.local file and see SETUP_INSTRUCTIONS.md');
+      }
+      
       return false;
     }
   };
@@ -137,9 +155,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithGoogle();
       // The onAuthStateChanged will handle the rest
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google sign in failed:', error);
       setLoading(false);
+      
+      // Log specific error details for debugging
+      if (error.message?.includes('Firebase configuration is incomplete')) {
+        console.error('🔥 Firebase Configuration Issue:', error.message);
+        console.error('📝 Please check your .env.local file and see SETUP_INSTRUCTIONS.md');
+      } else if (error.message?.includes('popup')) {
+        console.error('🚪 Popup Issue:', error.message);
+      }
+      
       return false;
     }
   };
