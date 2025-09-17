@@ -1,61 +1,235 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Navigation } from "@/components/navigation"
-import { Target, Clock, Utensils, Plus, RefreshCw, ArrowLeft, Zap } from "lucide-react"
+import { Target, Clock, Utensils, Plus, RefreshCw, ArrowLeft, Zap, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { api } from "@/lib/api"
+import { toast } from "sonner"
+
+interface NutritionGoals {
+  targetCalories: number
+  macroRatios: {
+    protein: number
+    carbs: number
+    fats: number
+  }
+}
+
+interface NutritionLog {
+  dailyTotals: {
+    calories: number
+    protein: number
+    carbohydrates: number
+    fat: number
+  }
+  waterIntake: number
+  meals: Array<{
+    mealType: string
+    time: string
+    foods: Array<{
+      name: string
+      quantity: { amount: number; unit: string }
+      nutrition: {
+        calories: number
+        protein: number
+        carbohydrates: number
+        fat: number
+      }
+    }>
+    totalNutrition: {
+      calories: number
+      protein: number
+      carbohydrates: number
+      fat: number
+    }
+  }>
+}
+
+interface NutritionPlan {
+  name: string
+  targetCalories: number
+  macroTargets: {
+    protein: { grams: number; percentage: number }
+    carbohydrates: { grams: number; percentage: number }
+    fat: { grams: number; percentage: number }
+  }
+  meals: Array<{
+    name: string
+    type: string
+    totalNutrition: {
+      calories: number
+      protein: number
+      carbohydrates: number
+      fat: number
+    }
+    foods: Array<{
+      name: string
+      quantity: { amount: number; unit: string }
+      nutrition: {
+        calories: number
+        protein: number
+        carbohydrates: number
+        fat: number
+      }
+    }>
+  }>
+  schedule: {
+    mealTiming: Array<{
+      mealType: string
+      time: string
+      calories: number
+    }>
+  }
+  waterIntakeTarget: number
+}
 
 export default function NutritionPage() {
   const [selectedDay, setSelectedDay] = useState("today")
+  const [nutritionLog, setNutritionLog] = useState<NutritionLog | null>(null)
+  const [nutritionGoals, setNutritionGoals] = useState<NutritionGoals | null>(null)
+  const [nutritionPlan, setNutritionPlan] = useState<NutritionPlan | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
 
-  const macroData = {
-    calories: { current: 1650, target: 2000, percentage: 83 },
-    protein: { current: 120, target: 150, percentage: 80 },
-    carbs: { current: 180, target: 220, percentage: 82 },
-    fats: { current: 55, target: 70, percentage: 79 },
+  useEffect(() => {
+    loadNutritionData()
+  }, [selectedDay])
+
+  const loadNutritionData = async () => {
+    try {
+      setIsLoading(true)
+      const today = new Date().toISOString().split('T')[0]
+      
+      // Load nutrition log for today
+      const logResponse = await api.getNutritionLog(today)
+      if (logResponse.success) {
+        setNutritionLog(logResponse.data.log)
+        setNutritionGoals(logResponse.data.goals)
+      }
+
+      // Try to get existing nutrition plan
+      const plansResponse = await api.getNutritionPlans({ limit: 1 })
+      if (plansResponse.success && plansResponse.data.plans.length > 0) {
+        setNutritionPlan(plansResponse.data.plans[0])
+      }
+    } catch (error) {
+      console.error('Error loading nutrition data:', error)
+      toast.error('Failed to load nutrition data')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const mealPlan = [
-    {
-      meal: "Breakfast",
-      time: "7:00 AM",
-      calories: 420,
-      items: [
-        { name: "Greek Yogurt with Berries", calories: 180, protein: 15 },
-        { name: "Granola", calories: 140, protein: 4 },
-        { name: "Banana", calories: 100, protein: 1 },
-      ],
-    },
-    {
-      meal: "Lunch",
-      time: "12:30 PM",
-      calories: 520,
-      items: [
-        { name: "Grilled Chicken Salad", calories: 320, protein: 35 },
-        { name: "Quinoa", calories: 120, protein: 4 },
-        { name: "Avocado", calories: 80, protein: 1 },
-      ],
-    },
-    {
-      meal: "Snack",
-      time: "3:30 PM",
-      calories: 180,
-      items: [{ name: "Protein Smoothie", calories: 180, protein: 25 }],
-    },
-    {
-      meal: "Dinner",
-      time: "7:00 PM",
-      calories: 530,
-      items: [
-        { name: "Salmon Fillet", calories: 280, protein: 40 },
-        { name: "Sweet Potato", calories: 150, protein: 3 },
-        { name: "Steamed Broccoli", calories: 100, protein: 5 },
-      ],
-    },
-  ]
+  const generateNewNutritionPlan = async () => {
+    try {
+      setIsGeneratingPlan(true)
+      
+      // Get user location for regional food preferences
+      let location = null
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+          })
+          
+          // Get location info (you could use a reverse geocoding service here)
+          location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          }
+        } catch (error) {
+          console.log('Location not available, using default preferences')
+        }
+      }
+
+      const response = await api.generateNutritionPlan({ location })
+      if (response.success) {
+        setNutritionPlan(response.data.nutritionPlan)
+        toast.success('New nutrition plan generated!')
+        // Reload nutrition data
+        await loadNutritionData()
+      }
+    } catch (error) {
+      console.error('Error generating nutrition plan:', error)
+      toast.error('Failed to generate nutrition plan')
+    } finally {
+      setIsGeneratingPlan(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pb-20 md:pb-0 flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading nutrition data...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Calculate macro percentages
+  const calculateMacroData = () => {
+    if (!nutritionLog || !nutritionGoals) {
+      return {
+        calories: { current: 0, target: 2000, percentage: 0 },
+        protein: { current: 0, target: 150, percentage: 0 },
+        carbs: { current: 0, target: 220, percentage: 0 },
+        fats: { current: 0, target: 70, percentage: 0 },
+      }
+    }
+
+    const targetProtein = (nutritionGoals.targetCalories * nutritionGoals.macroRatios.protein / 100) / 4
+    const targetCarbs = (nutritionGoals.targetCalories * nutritionGoals.macroRatios.carbs / 100) / 4
+    const targetFats = (nutritionGoals.targetCalories * nutritionGoals.macroRatios.fats / 100) / 9
+
+    return {
+      calories: {
+        current: Math.round(nutritionLog.dailyTotals.calories),
+        target: nutritionGoals.targetCalories,
+        percentage: Math.round((nutritionLog.dailyTotals.calories / nutritionGoals.targetCalories) * 100)
+      },
+      protein: {
+        current: Math.round(nutritionLog.dailyTotals.protein),
+        target: Math.round(targetProtein),
+        percentage: Math.round((nutritionLog.dailyTotals.protein / targetProtein) * 100)
+      },
+      carbs: {
+        current: Math.round(nutritionLog.dailyTotals.carbohydrates),
+        target: Math.round(targetCarbs),
+        percentage: Math.round((nutritionLog.dailyTotals.carbohydrates / targetCarbs) * 100)
+      },
+      fats: {
+        current: Math.round(nutritionLog.dailyTotals.fat),
+        target: Math.round(targetFats),
+        percentage: Math.round((nutritionLog.dailyTotals.fat / targetFats) * 100)
+      }
+    }
+  }
+
+  const macroData = calculateMacroData()
+
+  // Convert nutrition plan to meal plan format
+  const getMealPlan = () => {
+    if (!nutritionPlan) return []
+
+    return nutritionPlan.meals.map(meal => ({
+      meal: meal.name,
+      time: nutritionPlan.schedule.mealTiming.find(t => t.mealType === meal.type)?.time || '12:00 PM',
+      calories: meal.totalNutrition.calories,
+      items: meal.foods.map(food => ({
+        name: food.name,
+        calories: food.nutrition.calories,
+        protein: food.nutrition.protein
+      }))
+    }))
+  }
+
+  const mealPlan = getMealPlan()
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
@@ -66,9 +240,17 @@ export default function NutritionPage() {
             <p className="text-muted-foreground">AI-powered meal suggestions for your fitness goals</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Generate New Plan
+            <Button 
+              variant="outline" 
+              onClick={generateNewNutritionPlan}
+              disabled={isGeneratingPlan}
+            >
+              {isGeneratingPlan ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              {isGeneratingPlan ? 'Generating...' : 'Generate New Plan'}
             </Button>
             <Link href="/dashboard">
               <Button variant="outline">
@@ -155,7 +337,32 @@ export default function NutritionPage() {
             </div>
 
             <div className="space-y-4">
-              {mealPlan.map((meal, index) => (
+              {mealPlan.length === 0 ? (
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Utensils className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-semibold text-lg mb-2">No Meal Plan Available</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Generate an AI-powered nutrition plan tailored to your goals and location.
+                    </p>
+                    <Button 
+                      onClick={generateNewNutritionPlan}
+                      disabled={isGeneratingPlan}
+                      className="w-full"
+                    >
+                      {isGeneratingPlan ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Zap className="h-4 w-4 mr-2" />
+                      )}
+                      {isGeneratingPlan ? 'Generating...' : 'Generate Meal Plan'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                mealPlan.map((meal, index) => (
                 <Card key={index} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -201,7 +408,8 @@ export default function NutritionPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -215,19 +423,21 @@ export default function NutritionPage() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Total Calories</span>
-                  <span className="font-semibold">1,650</span>
+                  <span className="font-semibold">{macroData.calories.current.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Meals Planned</span>
-                  <span className="font-semibold">4/4</span>
+                  <span className="font-semibold">{mealPlan.length}/{nutritionPlan?.schedule?.mealTiming?.length || 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Protein Goal</span>
-                  <span className="font-semibold text-primary">80%</span>
+                  <span className="font-semibold text-primary">{macroData.protein.percentage}%</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Water Intake</span>
-                  <span className="font-semibold">6/8 glasses</span>
+                  <span className="font-semibold">
+                    {nutritionLog?.waterIntake || 0}/{nutritionPlan?.waterIntakeTarget || 8} glasses
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -238,27 +448,47 @@ export default function NutritionPage() {
                 <CardTitle className="text-lg">Suggested Alternatives</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="p-3 bg-accent/5 border border-accent/20 rounded-lg">
-                  <div className="font-medium text-sm">High-Protein Breakfast</div>
-                  <div className="text-xs text-muted-foreground">Scrambled eggs with spinach</div>
-                  <div className="text-xs text-accent font-medium">380 cal • 28g protein</div>
-                </div>
+                {nutritionPlan ? (
+                  <>
+                    <div className="p-3 bg-accent/5 border border-accent/20 rounded-lg">
+                      <div className="font-medium text-sm">High-Protein Option</div>
+                      <div className="text-xs text-muted-foreground">Based on your goals</div>
+                      <div className="text-xs text-accent font-medium">
+                        {Math.round(macroData.protein.target * 0.3)} cal • {Math.round(macroData.protein.target * 0.2)}g protein
+                      </div>
+                    </div>
 
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                  <div className="font-medium text-sm">Light Lunch Option</div>
-                  <div className="text-xs text-muted-foreground">Turkey and veggie wrap</div>
-                  <div className="text-xs text-primary font-medium">420 cal • 25g protein</div>
-                </div>
+                    <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                      <div className="font-medium text-sm">Balanced Meal</div>
+                      <div className="text-xs text-muted-foreground">Matches your macro targets</div>
+                      <div className="text-xs text-primary font-medium">
+                        {Math.round(macroData.calories.target * 0.25)} cal • {Math.round(macroData.protein.target * 0.25)}g protein
+                      </div>
+                    </div>
 
-                <div className="p-3 bg-secondary/5 border border-secondary/20 rounded-lg">
-                  <div className="font-medium text-sm">Post-Workout Snack</div>
-                  <div className="text-xs text-muted-foreground">Chocolate protein shake</div>
-                  <div className="text-xs text-secondary-foreground font-medium">200 cal • 30g protein</div>
-                </div>
+                    <div className="p-3 bg-secondary/5 border border-secondary/20 rounded-lg">
+                      <div className="font-medium text-sm">Pre-Workout Fuel</div>
+                      <div className="text-xs text-muted-foreground">Quick energy boost</div>
+                      <div className="text-xs text-secondary-foreground font-medium">
+                        {Math.round(macroData.carbs.target * 0.4)} cal • {Math.round(macroData.carbs.target * 0.3)}g carbs
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">Generate a nutrition plan to see personalized suggestions</p>
+                  </div>
+                )}
 
-                <Button variant="outline" size="sm" className="w-full bg-transparent">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full bg-transparent"
+                  onClick={generateNewNutritionPlan}
+                  disabled={isGeneratingPlan}
+                >
                   <Zap className="h-3 w-3 mr-1" />
-                  Get More Suggestions
+                  {nutritionPlan ? 'Get More Suggestions' : 'Generate Plan'}
                 </Button>
               </CardContent>
             </Card>

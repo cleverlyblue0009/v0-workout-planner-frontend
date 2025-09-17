@@ -152,6 +152,15 @@ const userSchema = new mongoose.Schema({
     },
     lastWorkoutDate: Date
   },
+  location: {
+    country: String,
+    region: String,
+    city: String,
+    latitude: Number,
+    longitude: Number,
+    timezone: String,
+    lastUpdated: Date
+  },
   achievements: [{
     title: String,
     description: String,
