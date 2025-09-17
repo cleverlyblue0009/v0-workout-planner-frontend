@@ -1,7 +1,7 @@
-const jwt = require('jsonwebtoken');
+const { admin } = require('../config/firebase');
 const User = require('../models/User');
 
-// Protect routes middleware
+// Protect routes middleware using Firebase ID tokens
 const protect = async (req, res, next) => {
   let token;
 
@@ -10,39 +10,44 @@ const protect = async (req, res, next) => {
       // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      // Get user from the token
-      req.user = await User.findById(decoded.id).select('-password');
-
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found'
+      // Verify Firebase ID token
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      // Get or create user from Firebase UID
+      let user = await User.findOne({ firebaseUid: decodedToken.uid }).select('-password');
+      
+      if (!user) {
+        // If user doesn't exist in our database, create a minimal user record
+        // This handles cases where users sign up via Firebase but haven't completed profile setup
+        user = await User.create({
+          firebaseUid: decodedToken.uid,
+          email: decodedToken.email,
+          name: decodedToken.name || decodedToken.email?.split('@')[0] || 'User',
+          profile: {},
+          preferences: {}
         });
       }
 
+      req.user = user;
+      req.firebaseUser = decodedToken; // Also store Firebase user data
       next();
     } catch (error) {
-      console.error('Token verification error:', error);
+      console.error('Firebase token verification error:', error);
       return res.status(401).json({
         success: false,
-        message: 'Not authorized, token failed'
+        message: 'Not authorized, invalid token'
       });
     }
-  }
-
-  if (!token) {
+  } else {
     return res.status(401).json({
       success: false,
-      message: 'Not authorized, no token'
+      message: 'Not authorized, no token provided'
     });
   }
 };
 
 // Admin middleware
-const admin = (req, res, next) => {
+const adminOnly = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();
   } else {
@@ -53,11 +58,4 @@ const admin = (req, res, next) => {
   }
 };
 
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE,
-  });
-};
-
-module.exports = { protect, admin, generateToken };
+module.exports = { protect, adminOnly };

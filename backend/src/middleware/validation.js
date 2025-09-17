@@ -13,52 +13,43 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// User registration validation
-const validateRegistration = [
+// Profile setup validation (for Firebase users)
+const validateProfileSetup = [
   body('name')
+    .optional()
     .trim()
     .isLength({ min: 2, max: 50 })
     .withMessage('Name must be between 2 and 50 characters'),
   
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
-  
-  body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number'),
-  
-  body('age')
+  body('profile.age')
     .optional()
     .isInt({ min: 13, max: 120 })
     .withMessage('Age must be between 13 and 120'),
   
-  body('weight')
+  body('profile.weight')
     .optional()
     .isFloat({ min: 30, max: 500 })
     .withMessage('Weight must be between 30 and 500 kg'),
   
-  body('height')
+  body('profile.height')
     .optional()
     .isFloat({ min: 100, max: 250 })
     .withMessage('Height must be between 100 and 250 cm'),
   
-  handleValidationErrors
-];
-
-// User login validation
-const validateLogin = [
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
+  body('profile.gender')
+    .optional()
+    .isIn(['male', 'female', 'other', 'prefer-not-to-say'])
+    .withMessage('Invalid gender selection'),
   
-  body('password')
-    .notEmpty()
-    .withMessage('Password is required'),
+  body('profile.activityLevel')
+    .optional()
+    .isIn(['sedentary', 'lightly-active', 'moderately-active', 'very-active', 'extremely-active'])
+    .withMessage('Invalid activity level'),
+  
+  body('profile.fitnessGoal')
+    .optional()
+    .isIn(['weight-loss', 'weight-gain', 'muscle-gain', 'strength', 'endurance', 'general-fitness', 'maintenance'])
+    .withMessage('Invalid fitness goal'),
   
   handleValidationErrors
 ];
@@ -138,8 +129,7 @@ const validateProgressEntry = [
 ];
 
 module.exports = {
-  validateRegistration,
-  validateLogin,
+  validateProfileSetup,
   validateWorkoutPlan,
   validateNutritionPlan,
   validateProgressEntry,

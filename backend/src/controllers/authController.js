@@ -1,30 +1,25 @@
 const User = require('../models/User');
-const { generateToken } = require('../middleware/auth');
+const { admin } = require('../config/firebase');
 
-// @desc    Register new user
-// @route   POST /api/auth/register
-// @access  Public
-const register = async (req, res) => {
+// @desc    Complete user profile setup (called after Firebase auth)
+// @route   POST /api/auth/setup-profile
+// @access  Private (requires Firebase token)
+const setupProfile = async (req, res) => {
   try {
-    const { name, email, password, profile, preferences } = req.body;
+    const { name, profile, preferences } = req.body;
+    const firebaseUid = req.firebaseUser.uid;
 
-    // Check if user exists
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists with this email'
-      });
+    // Update the user that was created in the middleware
+    const user = req.user;
+    
+    // Update user information
+    if (name) user.name = name;
+    if (profile) {
+      user.profile = { ...user.profile.toObject(), ...profile };
     }
-
-    // Create user
-    const user = await User.create({
-      name,
-      email,
-      password,
-      profile: profile || {},
-      preferences: preferences || {}
-    });
+    if (preferences) {
+      user.preferences = { ...user.preferences.toObject(), ...preferences };
+    }
 
     // Calculate initial nutrition goals if profile data is provided
     if (profile?.weight && profile?.height && profile?.age && profile?.gender) {
@@ -46,75 +41,68 @@ const register = async (req, res) => {
         }
 
         user.nutritionGoals.targetCalories = Math.max(1200, Math.min(4000, targetCalories));
-        await user.save();
       }
     }
 
-    const token = generateToken(user._id);
+    await user.save();
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: 'User registered successfully',
+      message: 'Profile setup completed successfully',
       data: {
         user: {
           id: user._id,
+          firebaseUid: user.firebaseUid,
           name: user.name,
           email: user.email,
           profile: user.profile,
           preferences: user.preferences,
           nutritionGoals: user.nutritionGoals,
           streak: user.streak
-        },
-        token
+        }
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Profile setup error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during registration',
+      message: 'Server error during profile setup',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-const login = async (req, res) => {
+// @desc    Sync user data with Firebase (called on login)
+// @route   POST /api/auth/sync
+// @access  Private (requires Firebase token)
+const syncUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const firebaseUser = req.firebaseUser;
+    let user = req.user;
 
-    // Check for user
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Check password
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Update last login
+    // Update last login and email verification status
     user.lastLogin = new Date();
-    await user.save();
+    user.emailVerified = firebaseUser.email_verified || false;
+    
+    // Update email if it changed in Firebase
+    if (firebaseUser.email && firebaseUser.email !== user.email) {
+      user.email = firebaseUser.email;
+    }
 
-    const token = generateToken(user._id);
+    // Update name if it changed in Firebase and user hasn't set a custom name
+    if (firebaseUser.name && !user.name.includes('@')) {
+      user.name = firebaseUser.name;
+    }
+
+    await user.save();
 
     res.json({
       success: true,
-      message: 'Login successful',
+      message: 'User synced successfully',
       data: {
         user: {
           id: user._id,
+          firebaseUid: user.firebaseUid,
           name: user.name,
           email: user.email,
           profile: user.profile,
@@ -122,16 +110,16 @@ const login = async (req, res) => {
           nutritionGoals: user.nutritionGoals,
           streak: user.streak,
           achievements: user.achievements,
-          lastLogin: user.lastLogin
-        },
-        token
+          lastLogin: user.lastLogin,
+          emailVerified: user.emailVerified
+        }
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('User sync error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during login',
+      message: 'Server error during user sync',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -142,13 +130,14 @@ const login = async (req, res) => {
 // @access  Private
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = req.user;
 
     res.json({
       success: true,
       data: {
         user: {
           id: user._id,
+          firebaseUid: user.firebaseUid,
           name: user.name,
           email: user.email,
           profile: user.profile,
@@ -157,6 +146,7 @@ const getMe = async (req, res) => {
           streak: user.streak,
           achievements: user.achievements,
           lastLogin: user.lastLogin,
+          emailVerified: user.emailVerified,
           createdAt: user.createdAt
         }
       }
@@ -177,14 +167,7 @@ const getMe = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { name, profile, preferences } = req.body;
-
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+    const user = req.user;
 
     // Update fields
     if (name) user.name = name;
@@ -225,6 +208,7 @@ const updateProfile = async (req, res) => {
       data: {
         user: {
           id: user._id,
+          firebaseUid: user.firebaseUid,
           name: user.name,
           email: user.email,
           profile: user.profile,
@@ -244,70 +228,20 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// @desc    Change password
-// @route   PUT /api/auth/password
-// @access  Private
-const changePassword = async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    const user = await User.findById(req.user.id).select('+password');
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Check current password
-    const isMatch = await user.matchPassword(currentPassword);
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password is incorrect'
-      });
-    }
-
-    // Update password
-    user.password = newPassword;
-    await user.save();
-
-    res.json({
-      success: true,
-      message: 'Password changed successfully'
-    });
-  } catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error changing password',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
 // @desc    Delete user account
 // @route   DELETE /api/auth/account
 // @access  Private
 const deleteAccount = async (req, res) => {
   try {
-    const { password } = req.body;
+    const user = req.user;
+    const firebaseUid = req.firebaseUser.uid;
 
-    const user = await User.findById(req.user.id).select('+password');
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Verify password
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password is incorrect'
-      });
+    // Delete user from Firebase
+    try {
+      await admin.auth().deleteUser(firebaseUid);
+    } catch (firebaseError) {
+      console.error('Firebase user deletion error:', firebaseError);
+      // Continue with soft delete even if Firebase deletion fails
     }
 
     // Soft delete - mark as inactive instead of deleting
@@ -330,10 +264,9 @@ const deleteAccount = async (req, res) => {
 };
 
 module.exports = {
-  register,
-  login,
+  setupProfile,
+  syncUser,
   getMe,
   updateProfile,
-  changePassword,
   deleteAccount
 };

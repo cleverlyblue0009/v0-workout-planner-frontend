@@ -1,10 +1,21 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { 
+  auth, 
+  signUpWithEmailAndPassword, 
+  signInWithEmailAndPasswordAuth,
+  signInWithGoogle,
+  signOutAuth,
+  resetPassword,
+  onAuthStateChanged,
+  FirebaseUser 
+} from '@/lib/firebase';
 import { api } from '@/lib/api';
 
 interface User {
   id: string;
+  firebaseUid: string;
   name: string;
   email: string;
   profile: {
@@ -43,21 +54,21 @@ interface User {
     achievedAt: string;
     category: string;
   }>;
+  emailVerified?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
+  firebaseUser: FirebaseUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (userData: {
-    name: string;
-    email: string;
-    password: string;
-    profile?: any;
-    preferences?: any;
-  }) => Promise<boolean>;
-  logout: () => void;
+  signUp: (email: string, password: string, name?: string) => Promise<boolean>;
+  signIn: (email: string, password: string) => Promise<boolean>;
+  signInWithGoogleAuth: () => Promise<boolean>;
+  signOut: () => Promise<void>;
+  resetUserPassword: (email: string) => Promise<boolean>;
+  setupProfile: (profileData: any) => Promise<boolean>;
   updateProfile: (profileData: any) => Promise<boolean>;
+  deleteAccount: () => Promise<boolean>;
   refreshUser: () => Promise<void>;
 }
 
@@ -65,69 +76,101 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check for existing session on mount
   useEffect(() => {
-    checkAuthStatus();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setFirebaseUser(firebaseUser);
+      
+      if (firebaseUser) {
+        // User is signed in, sync with backend
+        try {
+          const response = await api.syncUser();
+          if (response.success && response.data?.user) {
+            setUser(response.data.user);
+          }
+        } catch (error) {
+          console.error('User sync failed:', error);
+          // If sync fails, we still have Firebase user but no backend user
+        }
+      } else {
+        // User is signed out
+        setUser(null);
+      }
+      
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const checkAuthStatus = async () => {
-    try {
-      const token = localStorage.getItem('fitplan_token');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      api.setToken(token);
-      const response = await api.getMe();
-      
-      if (response.success && response.data?.user) {
-        setUser(response.data.user);
-      } else {
-        // Invalid token, clear it
-        localStorage.removeItem('fitplan_token');
-        api.setToken(null);
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('fitplan_token');
-      api.setToken(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const signUp = async (email: string, password: string, name?: string): Promise<boolean> => {
     try {
       setLoading(true);
-      const response = await api.login({ email, password });
-      
-      if (response.success && response.data?.user) {
-        setUser(response.data.user);
-        return true;
-      }
-      
-      return false;
+      await signUpWithEmailAndPassword(email, password, name);
+      // The onAuthStateChanged will handle the rest
+      return true;
     } catch (error) {
-      console.error('Login failed:', error);
-      return false;
-    } finally {
+      console.error('Sign up failed:', error);
       setLoading(false);
+      return false;
     }
   };
 
-  const register = async (userData: {
-    name: string;
-    email: string;
-    password: string;
+  const signIn = async (email: string, password: string): Promise<boolean> => {
+    try {
+      setLoading(true);
+      await signInWithEmailAndPasswordAuth(email, password);
+      // The onAuthStateChanged will handle the rest
+      return true;
+    } catch (error) {
+      console.error('Sign in failed:', error);
+      setLoading(false);
+      return false;
+    }
+  };
+
+  const signInWithGoogleAuth = async (): Promise<boolean> => {
+    try {
+      setLoading(true);
+      await signInWithGoogle();
+      // The onAuthStateChanged will handle the rest
+      return true;
+    } catch (error) {
+      console.error('Google sign in failed:', error);
+      setLoading(false);
+      return false;
+    }
+  };
+
+  const signOut = async (): Promise<void> => {
+    try {
+      await signOutAuth();
+      setUser(null);
+      setFirebaseUser(null);
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    }
+  };
+
+  const resetUserPassword = async (email: string): Promise<boolean> => {
+    try {
+      await resetPassword(email);
+      return true;
+    } catch (error) {
+      console.error('Password reset failed:', error);
+      return false;
+    }
+  };
+
+  const setupProfile = async (profileData: {
+    name?: string;
     profile?: any;
     preferences?: any;
   }): Promise<boolean> => {
     try {
-      setLoading(true);
-      const response = await api.register(userData);
+      const response = await api.setupProfile(profileData);
       
       if (response.success && response.data?.user) {
         setUser(response.data.user);
@@ -136,16 +179,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       return false;
     } catch (error) {
-      console.error('Registration failed:', error);
+      console.error('Profile setup failed:', error);
       return false;
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    api.logout();
   };
 
   const updateProfile = async (profileData: any): Promise<boolean> => {
@@ -164,6 +200,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteAccount = async (): Promise<boolean> => {
+    try {
+      const response = await api.deleteAccount();
+      
+      if (response.success) {
+        await signOut();
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Account deletion failed:', error);
+      return false;
+    }
+  };
+
   const refreshUser = async () => {
     try {
       const response = await api.getMe();
@@ -178,11 +230,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = {
     user,
+    firebaseUser,
     loading,
-    login,
-    register,
-    logout,
+    signUp,
+    signIn,
+    signInWithGoogleAuth,
+    signOut,
+    resetUserPassword,
+    setupProfile,
     updateProfile,
+    deleteAccount,
     refreshUser,
   };
 

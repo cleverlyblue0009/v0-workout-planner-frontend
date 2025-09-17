@@ -11,6 +11,9 @@ const socketIo = require('socket.io');
 // Database connection
 const connectDB = require('./config/database');
 
+// Firebase initialization
+const { initializeFirebase } = require('./config/firebase');
+
 // Route imports
 const authRoutes = require('./routes/auth');
 const workoutRoutes = require('./routes/workouts');
@@ -22,6 +25,9 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 
 // Connect to database
 connectDB();
+
+// Initialize Firebase Admin SDK
+initializeFirebase();
 
 const app = express();
 const server = http.createServer(app);
