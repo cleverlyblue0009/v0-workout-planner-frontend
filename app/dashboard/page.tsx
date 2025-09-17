@@ -11,6 +11,7 @@ import { Calendar, Flame, Target, TrendingUp, Clock, Dumbbell, User, ChevronRigh
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { api } from "@/lib/api"
+import { ProfileDropdown } from "@/components/profile-dropdown"
 
 interface DashboardStats {
   workoutStats: {
@@ -154,9 +155,7 @@ export default function DashboardPage() {
               <Calendar className="h-4 w-4 mr-2" />
               {currentMonth}
             </Button>
-            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-              <User className="h-5 w-5 text-primary" />
-            </div>
+            <ProfileDropdown />
           </div>
         </div>
       </header>

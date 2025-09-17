@@ -6,6 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/AuthContext"
+import { ProfileDropdown } from "@/components/profile-dropdown"
 
 const navItems = [
   { href: "/dashboard", label: "Home", icon: Home },
@@ -45,16 +46,6 @@ export function Navigation() {
 
 export function DesktopNavigation() {
   const pathname = usePathname()
-  const { signOut } = useAuth()
-
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-      window.location.href = "/auth/login"
-    } catch (error) {
-      console.error("Sign out error:", error)
-    }
-  }
 
   return (
     <nav className="hidden md:flex items-center gap-6">
@@ -71,10 +62,7 @@ export function DesktopNavigation() {
           </Link>
         )
       })}
-      <Button variant="outline" onClick={handleSignOut} className="flex items-center gap-2">
-        <LogOut className="h-4 w-4" />
-        Sign Out
-      </Button>
+      <ProfileDropdown />
     </nav>
   )
 }

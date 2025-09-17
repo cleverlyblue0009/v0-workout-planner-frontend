@@ -5,8 +5,15 @@ class AIService {
   // Generate personalized workout plan
   static async generateWorkoutPlan(userProfile, preferences) {
     try {
+      // Check if OpenAI API key is available
+      if (!process.env.OPENAI_API_KEY) {
+        console.warn('OpenAI API key not found, using fallback workout plan');
+        return this.generateFallbackWorkoutPlan(userProfile, preferences);
+      }
+
       const prompt = this.buildWorkoutPrompt(userProfile, preferences);
       
+      console.log('Calling OpenAI API for workout plan generation...');
       const response = await openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
@@ -18,18 +25,27 @@ class AIService {
       });
 
       const workoutPlan = this.parseWorkoutResponse(response.choices[0].message.content);
+      console.log('Successfully generated AI workout plan');
       return workoutPlan;
     } catch (error) {
-      console.error('AI workout generation error:', error);
-      throw new Error('Failed to generate workout plan');
+      console.error('AI workout generation error:', error.message);
+      console.warn('Falling back to template workout plan');
+      return this.generateFallbackWorkoutPlan(userProfile, preferences);
     }
   }
 
   // Generate personalized nutrition plan
   static async generateNutritionPlan(userProfile, preferences, nutritionGoals, location = null, workoutGoals = null) {
     try {
+      // Check if OpenAI API key is available
+      if (!process.env.OPENAI_API_KEY) {
+        console.warn('OpenAI API key not found, using fallback nutrition plan');
+        return this.generateFallbackNutritionPlan(userProfile, nutritionGoals, workoutGoals);
+      }
+
       const prompt = this.buildNutritionPrompt(userProfile, preferences, nutritionGoals, location, workoutGoals);
       
+      console.log('Calling OpenAI API for nutrition plan generation...');
       const response = await openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
@@ -41,10 +57,12 @@ class AIService {
       });
 
       const nutritionPlan = this.parseNutritionResponse(response.choices[0].message.content);
+      console.log('Successfully generated AI nutrition plan');
       return nutritionPlan;
     } catch (error) {
-      console.error('AI nutrition generation error:', error);
-      throw new Error('Failed to generate nutrition plan');
+      console.error('AI nutrition generation error:', error.message);
+      console.warn('Falling back to template nutrition plan');
+      return this.generateFallbackNutritionPlan(userProfile, nutritionGoals, workoutGoals);
     }
   }
 
@@ -393,6 +411,300 @@ Format the response as a structured JSON object.
         timelineProjection: 'On track to reach goals'
       };
     }
+  }
+
+  // Generate fallback nutrition plan when AI is not available
+  static generateFallbackNutritionPlan(userProfile, nutritionGoals, workoutGoals = null) {
+    const targetCalories = nutritionGoals.targetCalories || 2000;
+    const proteinGrams = Math.round((targetCalories * nutritionGoals.macroRatios.protein / 100) / 4);
+    const carbGrams = Math.round((targetCalories * nutritionGoals.macroRatios.carbs / 100) / 4);
+    const fatGrams = Math.round((targetCalories * nutritionGoals.macroRatios.fats / 100) / 9);
+
+    // Basic meal distribution (breakfast: 25%, lunch: 35%, dinner: 30%, snacks: 10%)
+    const breakfastCals = Math.round(targetCalories * 0.25);
+    const lunchCals = Math.round(targetCalories * 0.35);
+    const dinnerCals = Math.round(targetCalories * 0.30);
+    const snackCals = Math.round(targetCalories * 0.10);
+
+    return {
+      name: 'Balanced Nutrition Plan',
+      description: `A balanced ${targetCalories}-calorie meal plan designed for your fitness goals`,
+      goal: userProfile.fitnessGoal || 'maintenance',
+      targetCalories: targetCalories,
+      macroTargets: {
+        protein: { grams: proteinGrams, percentage: nutritionGoals.macroRatios.protein },
+        carbohydrates: { grams: carbGrams, percentage: nutritionGoals.macroRatios.carbs },
+        fat: { grams: fatGrams, percentage: nutritionGoals.macroRatios.fats }
+      },
+      meals: [
+        {
+          name: 'Balanced Breakfast',
+          type: 'breakfast',
+          totalNutrition: {
+            calories: breakfastCals,
+            protein: Math.round(proteinGrams * 0.25),
+            carbohydrates: Math.round(carbGrams * 0.25),
+            fat: Math.round(fatGrams * 0.25)
+          },
+          foods: [
+            {
+              name: 'Greek Yogurt with Berries',
+              quantity: { amount: 1, unit: 'cup' },
+              nutrition: {
+                calories: Math.round(breakfastCals * 0.6),
+                protein: Math.round(proteinGrams * 0.15),
+                carbohydrates: Math.round(carbGrams * 0.15),
+                fat: Math.round(fatGrams * 0.1)
+              }
+            },
+            {
+              name: 'Whole Grain Toast',
+              quantity: { amount: 1, unit: 'slice' },
+              nutrition: {
+                calories: Math.round(breakfastCals * 0.4),
+                protein: Math.round(proteinGrams * 0.1),
+                carbohydrates: Math.round(carbGrams * 0.1),
+                fat: Math.round(fatGrams * 0.15)
+              }
+            }
+          ]
+        },
+        {
+          name: 'Protein-Rich Lunch',
+          type: 'lunch',
+          totalNutrition: {
+            calories: lunchCals,
+            protein: Math.round(proteinGrams * 0.35),
+            carbohydrates: Math.round(carbGrams * 0.35),
+            fat: Math.round(fatGrams * 0.35)
+          },
+          foods: [
+            {
+              name: 'Grilled Chicken Salad',
+              quantity: { amount: 1, unit: 'large bowl' },
+              nutrition: {
+                calories: lunchCals,
+                protein: Math.round(proteinGrams * 0.35),
+                carbohydrates: Math.round(carbGrams * 0.35),
+                fat: Math.round(fatGrams * 0.35)
+              }
+            }
+          ]
+        },
+        {
+          name: 'Balanced Dinner',
+          type: 'dinner',
+          totalNutrition: {
+            calories: dinnerCals,
+            protein: Math.round(proteinGrams * 0.30),
+            carbohydrates: Math.round(carbGrams * 0.30),
+            fat: Math.round(fatGrams * 0.30)
+          },
+          foods: [
+            {
+              name: 'Baked Salmon with Vegetables',
+              quantity: { amount: 1, unit: 'serving' },
+              nutrition: {
+                calories: Math.round(dinnerCals * 0.7),
+                protein: Math.round(proteinGrams * 0.2),
+                carbohydrates: Math.round(carbGrams * 0.2),
+                fat: Math.round(fatGrams * 0.2)
+              }
+            },
+            {
+              name: 'Brown Rice',
+              quantity: { amount: 0.5, unit: 'cup' },
+              nutrition: {
+                calories: Math.round(dinnerCals * 0.3),
+                protein: Math.round(proteinGrams * 0.1),
+                carbohydrates: Math.round(carbGrams * 0.1),
+                fat: Math.round(fatGrams * 0.1)
+              }
+            }
+          ]
+        }
+      ],
+      schedule: {
+        mealTiming: [
+          { mealType: 'breakfast', time: '8:00 AM', calories: breakfastCals },
+          { mealType: 'lunch', time: '12:30 PM', calories: lunchCals },
+          { mealType: 'dinner', time: '7:00 PM', calories: dinnerCals },
+          { mealType: 'snack', time: '3:00 PM', calories: snackCals }
+        ]
+      },
+      waterIntakeTarget: 2.5,
+      workoutNutrition: workoutGoals ? {
+        preWorkout: {
+          foods: ['Banana with Almond Butter', 'Green Tea'],
+          timing: '30-60 minutes before workout',
+          notes: 'Focus on easily digestible carbs and moderate protein'
+        },
+        postWorkout: {
+          foods: ['Protein Shake', 'Greek Yogurt with Berries'],
+          timing: 'Within 30 minutes after workout',
+          notes: 'Prioritize protein for muscle recovery and carbs to replenish glycogen'
+        },
+        workoutDayAdjustments: 'Add an extra 200-300 calories on workout days',
+        restDayAdjustments: 'Maintain regular calorie intake, focus on recovery foods'
+      } : null,
+      isAIGenerated: false,
+      isFallback: true
+    };
+  }
+
+  // Generate fallback workout plan when AI is not available
+  static generateFallbackWorkoutPlan(userProfile, preferences) {
+    const duration = parseInt(preferences.workoutDuration) || 45;
+    const goal = preferences.goal || userProfile.fitnessGoal || 'general-fitness';
+    const difficulty = preferences.experience || 'intermediate';
+    const equipment = preferences.equipment || 'bodyweight';
+
+    // Basic exercises based on equipment and goal
+    let exercises = [];
+    
+    if (equipment === 'bodyweight' || equipment === 'minimal') {
+      exercises = [
+        {
+          name: 'Push-ups',
+          description: 'Classic bodyweight chest exercise',
+          targetMuscles: ['chest', 'shoulders', 'triceps'],
+          equipment: 'bodyweight',
+          difficulty: 'beginner',
+          sets: 3,
+          reps: { min: 8, max: 15, target: 12 },
+          restTime: 60,
+          instructions: [
+            'Start in plank position with hands shoulder-width apart',
+            'Lower your chest to the ground keeping body straight',
+            'Push back up to starting position',
+            'Keep core engaged throughout the movement'
+          ]
+        },
+        {
+          name: 'Squats',
+          description: 'Fundamental lower body exercise',
+          targetMuscles: ['quadriceps', 'glutes', 'hamstrings'],
+          equipment: 'bodyweight',
+          difficulty: 'beginner',
+          sets: 3,
+          reps: { min: 12, max: 20, target: 15 },
+          restTime: 60,
+          instructions: [
+            'Stand with feet shoulder-width apart',
+            'Lower down as if sitting back into a chair',
+            'Keep chest up and weight in your heels',
+            'Return to standing position'
+          ]
+        },
+        {
+          name: 'Plank',
+          description: 'Core stability exercise',
+          targetMuscles: ['core', 'shoulders'],
+          equipment: 'bodyweight',
+          difficulty: 'beginner',
+          sets: 3,
+          duration: { min: 30, max: 60, target: 45 },
+          restTime: 60,
+          instructions: [
+            'Hold a push-up position with forearms on ground',
+            'Keep body straight from head to heels',
+            'Engage core muscles throughout',
+            'Breathe normally while holding position'
+          ]
+        },
+        {
+          name: 'Lunges',
+          description: 'Single-leg strength exercise',
+          targetMuscles: ['quadriceps', 'glutes', 'hamstrings'],
+          equipment: 'bodyweight',
+          difficulty: 'intermediate',
+          sets: 3,
+          reps: { min: 10, max: 16, target: 12 },
+          restTime: 60,
+          instructions: [
+            'Step forward into a lunge position',
+            'Lower back knee toward the ground',
+            'Keep front knee over ankle',
+            'Push back to starting position'
+          ]
+        }
+      ];
+    } else if (equipment === 'gym') {
+      exercises = [
+        {
+          name: 'Bench Press',
+          description: 'Compound chest exercise',
+          targetMuscles: ['chest', 'shoulders', 'triceps'],
+          equipment: 'barbell',
+          difficulty: 'intermediate',
+          sets: 3,
+          reps: { min: 8, max: 12, target: 10 },
+          restTime: 90,
+          instructions: [
+            'Lie on bench with feet flat on floor',
+            'Grip bar slightly wider than shoulders',
+            'Lower bar to chest with control',
+            'Press bar back up to starting position'
+          ]
+        },
+        {
+          name: 'Deadlift',
+          description: 'Full-body compound movement',
+          targetMuscles: ['hamstrings', 'glutes', 'back', 'core'],
+          equipment: 'barbell',
+          difficulty: 'intermediate',
+          sets: 3,
+          reps: { min: 6, max: 10, target: 8 },
+          restTime: 120,
+          instructions: [
+            'Stand with feet hip-width apart',
+            'Grip bar with hands outside legs',
+            'Keep back straight and lift by extending hips',
+            'Stand tall then lower bar with control'
+          ]
+        },
+        {
+          name: 'Squats',
+          description: 'Compound lower body exercise',
+          targetMuscles: ['quadriceps', 'glutes', 'hamstrings'],
+          equipment: 'barbell',
+          difficulty: 'intermediate',
+          sets: 3,
+          reps: { min: 8, max: 12, target: 10 },
+          restTime: 90,
+          instructions: [
+            'Position bar on upper back',
+            'Stand with feet shoulder-width apart',
+            'Squat down keeping chest up',
+            'Drive through heels to stand'
+          ]
+        }
+      ];
+    }
+
+    return {
+      name: `${goal.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} Workout Plan`,
+      description: `A ${difficulty} level workout plan designed for ${goal.replace('-', ' ')} using ${equipment}`,
+      goal: goal,
+      difficulty: difficulty,
+      duration: duration,
+      equipment: equipment,
+      workoutType: 'strength',
+      exercises: exercises,
+      schedule: {
+        daysPerWeek: 3,
+        programLength: 12,
+        restDays: ['Wednesday', 'Saturday', 'Sunday']
+      },
+      estimatedCaloriesBurn: Math.round(duration * 6), // Rough estimate: 6 calories per minute
+      progressionNotes: [
+        'Increase reps when you can complete all sets with good form',
+        'Add weight or difficulty when exercises become easy',
+        'Focus on proper form over speed or weight'
+      ],
+      isAIGenerated: false,
+      isFallback: true
+    };
   }
 }
 
