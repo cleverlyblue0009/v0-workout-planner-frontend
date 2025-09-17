@@ -1,10 +1,11 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Dumbbell, Home, Target, TrendingUp, User } from "lucide-react"
+import { Dumbbell, Home, Target, TrendingUp, User, LogOut } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/AuthContext"
 
 const navItems = [
   { href: "/dashboard", label: "Home", icon: Home },
@@ -44,6 +45,16 @@ export function Navigation() {
 
 export function DesktopNavigation() {
   const pathname = usePathname()
+  const { signOut } = useAuth()
+
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+      window.location.href = "/auth/login"
+    } catch (error) {
+      console.error("Sign out error:", error)
+    }
+  }
 
   return (
     <nav className="hidden md:flex items-center gap-6">
@@ -60,6 +71,10 @@ export function DesktopNavigation() {
           </Link>
         )
       })}
+      <Button variant="outline" onClick={handleSignOut} className="flex items-center gap-2">
+        <LogOut className="h-4 w-4" />
+        Sign Out
+      </Button>
     </nav>
   )
 }

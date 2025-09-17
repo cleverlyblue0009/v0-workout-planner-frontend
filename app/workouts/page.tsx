@@ -1,18 +1,25 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Navigation } from "@/components/navigation"
-import { Dumbbell, Clock, Target, Zap, RefreshCw, Play, CheckCircle, ArrowLeft } from "lucide-react"
+import { Dumbbell, Clock, Target, Zap, RefreshCw, Play, CheckCircle, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { api } from "@/lib/api"
+import { toast } from "sonner"
+import { useAuth } from "@/contexts/AuthContext"
 
 export default function WorkoutsPage() {
+  const { user } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [generatedPlan, setGeneratedPlan] = useState(false)
+  const [workoutPlan, setWorkoutPlan] = useState(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [formData, setFormData] = useState({
     goal: "",
     equipment: "",
@@ -21,9 +28,72 @@ export default function WorkoutsPage() {
     experience: "",
   })
 
-  const handleGeneratePlan = () => {
-    setGeneratedPlan(true)
-    setShowForm(false)
+  useEffect(() => {
+    loadExistingPlans()
+  }, [])
+
+  const loadExistingPlans = async () => {
+    try {
+      setIsLoading(true)
+      const response = await api.getWorkoutPlans({ limit: 1 })
+      if (response.success && response.data.plans.length > 0) {
+        setWorkoutPlan(response.data.plans[0])
+        setGeneratedPlan(true)
+      }
+    } catch (error) {
+      console.error('Error loading workout plans:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGeneratePlan = async () => {
+    if (!formData.goal || !formData.equipment || !formData.timePerDay || !formData.workoutStyle || !formData.experience) {
+      toast.error("Please fill in all fields")
+      return
+    }
+
+    try {
+      setIsGenerating(true)
+      
+      // Update user profile with workout preferences
+      await api.updateProfile({
+        preferences: {
+          ...user?.preferences,
+          equipment: formData.equipment,
+          workoutStyle: formData.workoutStyle,
+          workoutDuration: formData.timePerDay,
+          workoutFrequency: 5 // Default frequency
+        },
+        profile: {
+          ...user?.profile,
+          fitnessGoal: formData.goal
+        }
+      })
+
+      // Generate AI workout plan
+      const response = await api.generateWorkoutPlan({
+        goal: formData.goal,
+        experience: formData.experience,
+        equipment: formData.equipment,
+        timePerDay: formData.timePerDay,
+        workoutStyle: formData.workoutStyle
+      })
+
+      if (response.success) {
+        setWorkoutPlan(response.data.workoutPlan)
+        setGeneratedPlan(true)
+        setShowForm(false)
+        toast.success("Workout plan generated successfully!")
+      } else {
+        toast.error("Failed to generate workout plan")
+      }
+    } catch (error) {
+      console.error('Error generating workout plan:', error)
+      toast.error("Failed to generate workout plan")
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const handleRegeneratePlan = () => {
@@ -146,9 +216,18 @@ export default function WorkoutsPage() {
                 </Select>
               </div>
 
-              <Button onClick={handleGeneratePlan} className="w-full" size="lg">
-                <Zap className="h-4 w-4 mr-2" />
-                Generate My AI Workout Plan
+              <Button 
+                onClick={handleGeneratePlan} 
+                className="w-full" 
+                size="lg"
+                disabled={isGenerating}
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 mr-2" />
+                )}
+                {isGenerating ? 'Generating Plan...' : 'Generate My AI Workout Plan'}
               </Button>
             </CardContent>
           </Card>
@@ -342,6 +421,17 @@ export default function WorkoutsPage() {
         </div>
 
         <Navigation />
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pb-20 md:pb-0 flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading workout plans...</span>
+        </div>
       </div>
     )
   }
