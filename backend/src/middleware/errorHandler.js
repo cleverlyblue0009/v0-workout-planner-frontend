@@ -24,14 +24,14 @@ const errorHandler = (err, req, res, next) => {
     error = { message, statusCode: 400 };
   }
 
-  // JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    const message = 'Invalid token';
+  // Firebase Auth errors
+  if (err.code === 'auth/invalid-id-token') {
+    const message = 'Invalid authentication token';
     error = { message, statusCode: 401 };
   }
 
-  if (err.name === 'TokenExpiredError') {
-    const message = 'Token expired';
+  if (err.code === 'auth/id-token-expired') {
+    const message = 'Authentication token expired';
     error = { message, statusCode: 401 };
   }
 

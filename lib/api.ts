@@ -1,3 +1,5 @@
+import { getIdToken } from './firebase';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 interface ApiResponse<T = any> {
@@ -9,25 +11,17 @@ interface ApiResponse<T = any> {
 
 class ApiClient {
   private baseURL: string;
-  private token: string | null = null;
 
   constructor(baseURL: string = API_BASE_URL) {
     this.baseURL = baseURL;
-    
-    // Initialize token from localStorage if available
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('fitplan_token');
-    }
   }
 
-  setToken(token: string | null) {
-    this.token = token;
-    if (typeof window !== 'undefined') {
-      if (token) {
-        localStorage.setItem('fitplan_token', token);
-      } else {
-        localStorage.removeItem('fitplan_token');
-      }
+  private async getAuthToken(): Promise<string | null> {
+    try {
+      return await getIdToken();
+    } catch (error) {
+      console.error('Error getting Firebase ID token:', error);
+      return null;
     }
   }
 
@@ -42,8 +36,10 @@ class ApiClient {
       ...options.headers,
     };
 
-    if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`;
+    // Get Firebase ID token for authenticated requests
+    const token = await this.getAuthToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
 
     try {
@@ -66,35 +62,21 @@ class ApiClient {
   }
 
   // Auth endpoints
-  async register(userData: {
-    name: string;
-    email: string;
-    password: string;
+  async setupProfile(profileData: {
+    name?: string;
     profile?: any;
     preferences?: any;
   }) {
-    return this.request('/auth/register', {
+    return this.request('/auth/setup-profile', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify(profileData),
     });
   }
 
-  async login(credentials: { email: string; password: string }) {
-    const response = await this.request('/auth/login', {
+  async syncUser() {
+    return this.request('/auth/sync', {
       method: 'POST',
-      body: JSON.stringify(credentials),
     });
-
-    if (response.success && response.data?.token) {
-      this.setToken(response.data.token);
-    }
-
-    return response;
-  }
-
-  async logout() {
-    this.setToken(null);
-    return { success: true };
   }
 
   async getMe() {
@@ -105,6 +87,12 @@ class ApiClient {
     return this.request('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(profileData),
+    });
+  }
+
+  async deleteAccount() {
+    return this.request('/auth/account', {
+      method: 'DELETE',
     });
   }
 

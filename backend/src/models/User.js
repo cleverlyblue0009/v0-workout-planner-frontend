@@ -1,7 +1,12 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
+  firebaseUid: {
+    type: String,
+    required: [true, 'Firebase UID is required'],
+    unique: true,
+    index: true
+  },
   name: {
     type: String,
     required: [true, 'Please provide a name'],
@@ -20,7 +25,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Please provide a password'],
+    // Password is optional since Firebase handles authentication
     minlength: [6, 'Password must be at least 6 characters'],
     select: false
   },
@@ -172,20 +177,8 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Encrypt password using bcrypt
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    next();
-  }
-
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-});
-
-// Match user entered password to hashed password in database
-userSchema.methods.matchPassword = async function(enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
+// Note: Password handling is now managed by Firebase Authentication
+// No local password hashing or matching needed
 
 // Calculate BMI
 userSchema.methods.calculateBMI = function() {
