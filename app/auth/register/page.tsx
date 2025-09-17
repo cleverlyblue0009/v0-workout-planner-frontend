@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
+import { DevConfigChecker } from '@/components/DevConfigChecker';
 import { Dumbbell, Eye, EyeOff, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -107,14 +108,20 @@ export default function RegisterPage() {
       }
     } catch (error: any) {
       console.error('Registration error:', error);
+      
+      // Handle specific error cases with helpful messages
       if (error.code === 'auth/email-already-in-use') {
         setError('An account with this email already exists');
       } else if (error.code === 'auth/weak-password') {
         setError('Password is too weak. Please choose a stronger password');
       } else if (error.code === 'auth/invalid-email') {
         setError('Invalid email address');
+      } else if (error.message?.includes('Firebase configuration is incomplete')) {
+        setError('Application is not properly configured. Please check the console for details.');
+      } else if (error.message?.includes('fetch')) {
+        setError('Cannot connect to server. Please ensure the backend is running.');
       } else {
-        setError('Registration failed. Please try again.');
+        setError(`Registration failed: ${error.message || 'Please try again.'}`);
       }
     } finally {
       setIsLoading(false);
@@ -135,7 +142,19 @@ export default function RegisterPage() {
       }
     } catch (error: any) {
       console.error('Google sign up error:', error);
-      setError('Google sign up failed. Please try again.');
+      
+      // Handle specific Google sign-in errors
+      if (error.message?.includes('Firebase configuration is incomplete')) {
+        setError('Application is not properly configured. Please check the console for details.');
+      } else if (error.message?.includes('popup')) {
+        setError(error.message);
+      } else if (error.code === 'auth/popup-blocked') {
+        setError('Popup was blocked. Please allow popups and try again.');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in was cancelled. Please try again.');
+      } else {
+        setError(`Google sign up failed: ${error.message || 'Please try again.'}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -455,6 +474,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/5 flex items-center justify-center p-4">
+      <DevConfigChecker />
       <div className="w-full max-w-md space-y-6">
         {/* Logo */}
         <div className="text-center">
