@@ -134,12 +134,42 @@ const generateNutritionPlan = async (req, res) => {
       }
     }
 
+    // Get workout goals if requested
+    let workoutGoals = null;
+    if (preferences.workoutGoals || preferences.includeWorkoutNutrition) {
+      if (preferences.workoutGoals) {
+        workoutGoals = preferences.workoutGoals;
+      } else {
+        // Try to get the latest workout plan
+        try {
+          const { WorkoutPlan } = require('../models/Workout');
+          const latestWorkoutPlan = await WorkoutPlan.findOne({
+            userId: req.user.id,
+            isActive: true
+          }).sort({ createdAt: -1 });
+          
+          if (latestWorkoutPlan) {
+            workoutGoals = {
+              goal: latestWorkoutPlan.goal,
+              difficulty: latestWorkoutPlan.difficulty,
+              duration: latestWorkoutPlan.duration,
+              workoutType: latestWorkoutPlan.workoutType,
+              estimatedCaloriesBurn: latestWorkoutPlan.estimatedCaloriesBurn
+            };
+          }
+        } catch (error) {
+          console.log('No workout plan found, using profile goals');
+        }
+      }
+    }
+
     // Generate AI nutrition plan
     const aiPlan = await AIService.generateNutritionPlan(
       user.profile.toObject(),
       { ...user.preferences.toObject(), ...preferences },
       nutritionGoals,
-      locationData
+      locationData,
+      workoutGoals
     );
 
     // Create nutrition plan in database

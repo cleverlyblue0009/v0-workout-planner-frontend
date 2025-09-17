@@ -26,9 +26,9 @@ class AIService {
   }
 
   // Generate personalized nutrition plan
-  static async generateNutritionPlan(userProfile, preferences, nutritionGoals, location = null) {
+  static async generateNutritionPlan(userProfile, preferences, nutritionGoals, location = null, workoutGoals = null) {
     try {
-      const prompt = this.buildNutritionPrompt(userProfile, preferences, nutritionGoals, location);
+      const prompt = this.buildNutritionPrompt(userProfile, preferences, nutritionGoals, location, workoutGoals);
       
       const response = await openai.chat.completions.create({
         model: 'gpt-4',
@@ -152,10 +152,11 @@ Format the response as a structured JSON object that can be easily parsed.
   }
 
   // Build nutrition generation prompt
-  static buildNutritionPrompt(userProfile, preferences, nutritionGoals, location = null) {
+  static buildNutritionPrompt(userProfile, preferences, nutritionGoals, location = null, workoutGoals = null) {
     let locationInfo = '';
     let regionalPreferences = '';
     let climateRecommendations = '';
+    let workoutNutritionInfo = '';
 
     if (location) {
       locationInfo = `
@@ -186,6 +187,24 @@ Climate-Based Recommendations:
       locationInfo += '\n\nPlease consider local/regional food availability, seasonal ingredients, cultural food preferences, and climate-appropriate foods for this location.';
     }
 
+    if (workoutGoals) {
+      workoutNutritionInfo = `
+Current Workout Plan Information:
+- Fitness Goal: ${workoutGoals.goal}
+- Workout Difficulty: ${workoutGoals.difficulty}
+- Session Duration: ${workoutGoals.duration} minutes
+- Workout Type: ${workoutGoals.workoutType}
+- Estimated Calories Burned per Session: ${workoutGoals.estimatedCaloriesBurn || 'not specified'}
+
+IMPORTANT: Adjust nutrition recommendations based on this workout plan:
+- Include pre-workout nutrition suggestions (timing, macros)
+- Include post-workout recovery nutrition (protein timing, carb replenishment)
+- Consider increased protein needs for muscle recovery
+- Adjust hydration needs based on workout intensity
+- Include workout day vs rest day meal variations if applicable
+- Consider timing of meals around workouts`;
+    }
+
     return `
 Create a personalized nutrition plan with the following specifications:
 
@@ -199,6 +218,7 @@ User Profile:
 ${locationInfo}
 ${regionalPreferences}
 ${climateRecommendations}
+${workoutNutritionInfo}
 
 Nutrition Goals:
 - Target Calories: ${nutritionGoals.targetCalories}
@@ -219,12 +239,34 @@ Please provide:
    - Specific food items with portions that are locally available
    - Nutritional breakdown for each meal
    - Consider seasonal ingredients and local cuisine preferences
+   - Include pre and post-workout nutrition if workout plan is provided
 2. Weekly meal rotation suggestions using regional foods
 3. Shopping list for the week with locally available ingredients
 4. Meal prep tips suitable for the local climate and lifestyle
 5. Hydration recommendations based on climate and activity level
+6. Workout-specific nutrition timing and recommendations (if workout plan provided):
+   - Pre-workout meal/snack suggestions with timing
+   - Post-workout recovery nutrition
+   - Workout day vs rest day variations
+   - Supplement recommendations if needed
 
-Format the response as a structured JSON object that can be easily parsed.
+Format the response as a structured JSON object that can be easily parsed with the following structure:
+{
+  "name": "plan name",
+  "description": "plan description", 
+  "meals": [array of meal objects with foods and nutrition],
+  "schedule": {"mealTiming": [array of meal timing objects]},
+  "workoutNutrition": {
+    "preWorkout": {"foods": [], "timing": "", "notes": ""},
+    "postWorkout": {"foods": [], "timing": "", "notes": ""},
+    "workoutDayAdjustments": "",
+    "restDayAdjustments": ""
+  },
+  "waterIntakeTarget": number,
+  "weeklyRotations": [array of alternative meal suggestions],
+  "shoppingList": [array of ingredients],
+  "mealPrepTips": [array of tips]
+}
     `;
   }
 

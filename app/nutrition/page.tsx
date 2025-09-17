@@ -133,29 +133,55 @@ export default function NutritionPage() {
       if (navigator.geolocation) {
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
           })
           
-          // Get location info (you could use a reverse geocoding service here)
           location = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude
           }
+          toast.success('Location detected for personalized meal suggestions!')
         } catch (error) {
           console.log('Location not available, using default preferences')
+          toast.info('Using default regional preferences (location not available)')
         }
       }
 
-      const response = await api.generateNutritionPlan({ location })
+      // Get current workout plans to inform nutrition planning
+      let workoutGoals = null
+      try {
+        const workoutResponse = await api.getWorkoutPlans({ limit: 1 })
+        if (workoutResponse.success && workoutResponse.data.plans.length > 0) {
+          const plan = workoutResponse.data.plans[0]
+          workoutGoals = {
+            goal: plan.goal,
+            difficulty: plan.difficulty,
+            duration: plan.duration,
+            workoutType: plan.workoutType,
+            estimatedCaloriesBurn: plan.estimatedCaloriesBurn
+          }
+        }
+      } catch (error) {
+        console.log('No workout plans found, using profile goals')
+      }
+
+      const response = await api.generateNutritionPlan({ 
+        location,
+        workoutGoals,
+        includeWorkoutNutrition: true
+      })
+      
       if (response.success) {
         setNutritionPlan(response.data.nutritionPlan)
-        toast.success('New nutrition plan generated!')
+        toast.success('Personalized nutrition plan generated based on your location and workout goals!')
         // Reload nutrition data
         await loadNutritionData()
+      } else {
+        toast.error('Failed to generate nutrition plan')
       }
     } catch (error) {
       console.error('Error generating nutrition plan:', error)
-      toast.error('Failed to generate nutrition plan')
+      toast.error('Failed to generate nutrition plan. Please try again.')
     } finally {
       setIsGeneratingPlan(false)
     }
