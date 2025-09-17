@@ -164,6 +164,14 @@ const generateNutritionPlan = async (req, res) => {
     }
 
     // Generate AI nutrition plan
+    console.log('Generating nutrition plan with:', {
+      userProfile: user.profile.toObject(),
+      preferences: { ...user.preferences.toObject(), ...preferences },
+      nutritionGoals,
+      locationData,
+      workoutGoals
+    });
+
     const aiPlan = await AIService.generateNutritionPlan(
       user.profile.toObject(),
       { ...user.preferences.toObject(), ...preferences },
