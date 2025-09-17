@@ -1,4 +1,5 @@
 const AIService = require('../services/aiService');
+const LocationService = require('../services/locationService');
 const { WorkoutPlan, WorkoutSession } = require('../models/Workout');
 const { NutritionPlan, NutritionLog } = require('../models/Nutrition');
 const User = require('../models/User');
@@ -63,11 +64,82 @@ const generateNutritionPlan = async (req, res) => {
     const user = await User.findById(req.user.id);
     const preferences = req.body;
 
+    // Handle location data if provided
+    let locationData = null;
+    if (preferences.location && preferences.location.latitude && preferences.location.longitude) {
+      // Get detailed location information from coordinates
+      const detailedLocation = await LocationService.getLocationFromCoordinates(
+        preferences.location.latitude,
+        preferences.location.longitude
+      );
+      
+      if (detailedLocation) {
+        locationData = detailedLocation;
+        
+        // Update user's location with detailed information
+        user.location = detailedLocation;
+        await user.save();
+      } else {
+        // Fallback to basic coordinates
+        locationData = preferences.location;
+      }
+    } else if (user.location) {
+      locationData = user.location;
+    }
+
+    // Ensure user has nutrition goals set
+    let nutritionGoals = user.nutritionGoals;
+    if (!nutritionGoals.targetCalories) {
+      // Calculate basic nutrition goals based on user profile
+      const bmr = user.calculateBMR();
+      const tdee = user.calculateTDEE();
+      
+      if (tdee) {
+        // Set default goals based on fitness goal
+        let calorieAdjustment = 0;
+        switch (user.profile.fitnessGoal) {
+          case 'weight-loss':
+            calorieAdjustment = -500; // 500 calorie deficit
+            break;
+          case 'weight-gain':
+          case 'muscle-gain':
+            calorieAdjustment = 300; // 300 calorie surplus
+            break;
+          default:
+            calorieAdjustment = 0; // maintenance
+        }
+        
+        nutritionGoals = {
+          targetCalories: Math.max(1200, tdee + calorieAdjustment),
+          macroRatios: {
+            protein: 25,
+            carbs: 45,
+            fats: 30
+          }
+        };
+        
+        // Update user's nutrition goals
+        user.nutritionGoals = nutritionGoals;
+        await user.save();
+      } else {
+        // Fallback defaults
+        nutritionGoals = {
+          targetCalories: 2000,
+          macroRatios: {
+            protein: 25,
+            carbs: 45,
+            fats: 30
+          }
+        };
+      }
+    }
+
     // Generate AI nutrition plan
     const aiPlan = await AIService.generateNutritionPlan(
       user.profile.toObject(),
       { ...user.preferences.toObject(), ...preferences },
-      user.nutritionGoals.toObject()
+      nutritionGoals,
+      locationData
     );
 
     // Create nutrition plan in database
@@ -76,8 +148,21 @@ const generateNutritionPlan = async (req, res) => {
       name: aiPlan.name || 'AI Generated Nutrition Plan',
       description: aiPlan.description || 'Personalized nutrition plan created by AI',
       goal: preferences.goal || user.profile.fitnessGoal || 'maintenance',
-      targetCalories: user.nutritionGoals.targetCalories,
-      macroTargets: aiPlan.macroTargets || user.nutritionGoals.macroRatios,
+      targetCalories: nutritionGoals.targetCalories,
+      macroTargets: aiPlan.macroTargets || {
+        protein: { 
+          grams: Math.round((nutritionGoals.targetCalories * nutritionGoals.macroRatios.protein / 100) / 4),
+          percentage: nutritionGoals.macroRatios.protein
+        },
+        carbohydrates: { 
+          grams: Math.round((nutritionGoals.targetCalories * nutritionGoals.macroRatios.carbs / 100) / 4),
+          percentage: nutritionGoals.macroRatios.carbs
+        },
+        fat: { 
+          grams: Math.round((nutritionGoals.targetCalories * nutritionGoals.macroRatios.fats / 100) / 9),
+          percentage: nutritionGoals.macroRatios.fats
+        }
+      },
       meals: aiPlan.meals || [],
       schedule: aiPlan.schedule || {
         mealsPerDay: 3,

@@ -227,6 +227,24 @@ class ApiClient {
     return this.request(`/nutrition/stats${period ? `?period=${period}` : ''}`);
   }
 
+  async getNutritionPlans(params?: {
+    page?: number;
+    limit?: number;
+    goal?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString());
+        }
+      });
+    }
+    
+    const queryString = queryParams.toString();
+    return this.request(`/nutrition/plans${queryString ? `?${queryString}` : ''}`);
+  }
+
   async getMealSuggestions(params?: {
     mealType?: string;
     targetCalories?: number;

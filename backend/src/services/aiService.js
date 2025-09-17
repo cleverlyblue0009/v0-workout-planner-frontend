@@ -1,4 +1,5 @@
 const { openai, WORKOUT_SYSTEM_PROMPT, NUTRITION_SYSTEM_PROMPT, PROGRESS_SYSTEM_PROMPT } = require('../config/openai');
+const LocationService = require('./locationService');
 
 class AIService {
   // Generate personalized workout plan
@@ -25,9 +26,9 @@ class AIService {
   }
 
   // Generate personalized nutrition plan
-  static async generateNutritionPlan(userProfile, preferences, nutritionGoals) {
+  static async generateNutritionPlan(userProfile, preferences, nutritionGoals, location = null) {
     try {
-      const prompt = this.buildNutritionPrompt(userProfile, preferences, nutritionGoals);
+      const prompt = this.buildNutritionPrompt(userProfile, preferences, nutritionGoals, location);
       
       const response = await openai.chat.completions.create({
         model: 'gpt-4',
@@ -151,7 +152,40 @@ Format the response as a structured JSON object that can be easily parsed.
   }
 
   // Build nutrition generation prompt
-  static buildNutritionPrompt(userProfile, preferences, nutritionGoals) {
+  static buildNutritionPrompt(userProfile, preferences, nutritionGoals, location = null) {
+    let locationInfo = '';
+    let regionalPreferences = '';
+    let climateRecommendations = '';
+
+    if (location) {
+      locationInfo = `
+Location Information:
+- Country: ${location.country || 'not specified'}
+- Region: ${location.region || 'not specified'}
+- City: ${location.city || 'not specified'}
+- Coordinates: ${location.latitude || 'N/A'}, ${location.longitude || 'N/A'}
+- Timezone: ${location.timezone || 'not specified'}`;
+
+      // Get regional food preferences
+      const regional = LocationService.getRegionalFoodPreferences(location);
+      regionalPreferences = `
+Regional Food Preferences:
+- Cuisine Types: ${regional.cuisineTypes.join(', ')}
+- Common Ingredients: ${regional.commonIngredients.join(', ')}
+- Meal Patterns: ${regional.mealPatterns.join(', ')}
+- Seasonal Considerations: ${regional.seasonalConsiderations}`;
+
+      // Get climate-based recommendations
+      const climate = LocationService.getClimateRecommendations(location);
+      climateRecommendations = `
+Climate-Based Recommendations:
+- Hydration Level: ${climate.hydrationLevel}
+- Food Temperature Preference: ${climate.foodTemperature}
+- Seasonal Focus: ${climate.seasonalFocus}`;
+
+      locationInfo += '\n\nPlease consider local/regional food availability, seasonal ingredients, cultural food preferences, and climate-appropriate foods for this location.';
+    }
+
     return `
 Create a personalized nutrition plan with the following specifications:
 
@@ -162,6 +196,9 @@ User Profile:
 - Height: ${userProfile.height || 'not specified'} cm
 - Activity Level: ${userProfile.activityLevel}
 - Fitness Goal: ${userProfile.fitnessGoal}
+${locationInfo}
+${regionalPreferences}
+${climateRecommendations}
 
 Nutrition Goals:
 - Target Calories: ${nutritionGoals.targetCalories}
@@ -179,12 +216,13 @@ Dietary Preferences:
 Please provide:
 1. A complete daily meal plan with:
    - Breakfast, lunch, dinner, and snacks (if applicable)
-   - Specific food items with portions
+   - Specific food items with portions that are locally available
    - Nutritional breakdown for each meal
-2. Weekly meal rotation suggestions
-3. Shopping list for the week
-4. Meal prep tips
-5. Hydration recommendations
+   - Consider seasonal ingredients and local cuisine preferences
+2. Weekly meal rotation suggestions using regional foods
+3. Shopping list for the week with locally available ingredients
+4. Meal prep tips suitable for the local climate and lifestyle
+5. Hydration recommendations based on climate and activity level
 
 Format the response as a structured JSON object that can be easily parsed.
     `;
