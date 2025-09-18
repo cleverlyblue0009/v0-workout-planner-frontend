@@ -289,7 +289,7 @@ export default function WorkoutsPage() {
                 <CardTitle>This Week's Schedule</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {workoutPlan ? 
+                {(workoutPlan ? 
                   // Generate schedule from actual workout plan
                   (() => {
                     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -312,7 +312,7 @@ export default function WorkoutsPage() {
                     { day: "Thursday", workout: "Active Recovery", duration: "20 min", completed: false },
                     { day: "Friday", workout: "Full Body Circuit", duration: "40 min", completed: false },
                   ]
-                }.map((item, index) => (
+                ).map((item, index) => (
                   <div
                     key={index}
                     className={`flex items-center justify-between p-3 rounded-lg ${
