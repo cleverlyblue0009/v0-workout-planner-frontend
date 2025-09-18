@@ -1,9 +1,23 @@
 const { OpenAI } = require('openai');
 
 // Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openai = null;
+
+try {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('⚠️  OPENAI_API_KEY not found. AI features will be disabled.');
+    console.warn('⚠️  Server will continue without OpenAI integration.');
+  } else {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    console.log('✅ OpenAI client initialized successfully');
+  }
+} catch (error) {
+  console.error('❌ OpenAI initialization failed:', error.message);
+  console.warn('⚠️  Server will continue without AI features.');
+  openai = null;
+}
 
 // Workout generation prompts
 const WORKOUT_SYSTEM_PROMPT = `You are an expert fitness trainer and exercise physiologist. Generate personalized workout plans based on user goals, fitness level, available equipment, and time constraints. 

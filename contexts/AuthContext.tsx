@@ -80,6 +80,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth || !onAuthStateChanged) {
+      // Firebase is not configured, set loading to false immediately
+      console.warn('Firebase is not configured. Authentication features are disabled.');
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setFirebaseUser(firebaseUser);
       
