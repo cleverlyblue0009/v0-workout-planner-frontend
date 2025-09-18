@@ -9,6 +9,7 @@ import { Target, Clock, Utensils, Plus, RefreshCw, ArrowLeft, Zap, Loader2 } fro
 import Link from "next/link"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface NutritionGoals {
   targetCalories: number
@@ -88,6 +89,7 @@ interface NutritionPlan {
 }
 
 export default function NutritionPage() {
+  const { user } = useAuth()
   const [selectedDay, setSelectedDay] = useState("today")
   const [nutritionLog, setNutritionLog] = useState<NutritionLog | null>(null)
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoals | null>(null)
@@ -107,14 +109,14 @@ export default function NutritionPage() {
       // Load nutrition log for today
       const logResponse = await api.getNutritionLog(today)
       if (logResponse.success) {
-        setNutritionLog(logResponse.data.log)
-        setNutritionGoals(logResponse.data.goals)
+        setNutritionLog((logResponse.data as any)?.log)
+        setNutritionGoals((logResponse.data as any)?.goals)
       }
 
       // Try to get existing nutrition plan
       const plansResponse = await api.getNutritionPlans({ limit: 1 })
-      if (plansResponse.success && plansResponse.data.plans.length > 0) {
-        setNutritionPlan(plansResponse.data.plans[0])
+      if (plansResponse.success && (plansResponse.data as any)?.plans?.length > 0) {
+        setNutritionPlan((plansResponse.data as any).plans[0])
       }
     } catch (error) {
       console.error('Error loading nutrition data:', error)
@@ -122,6 +124,20 @@ export default function NutritionPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Helper function to map fitness goals to nutrition goals
+  const mapFitnessGoalToNutritionGoal = (fitnessGoal: string | undefined): string => {
+    const goalMapping: { [key: string]: string } = {
+      'weight-loss': 'weight-loss',
+      'weight-gain': 'weight-gain',
+      'muscle-gain': 'muscle-gain',
+      'strength': 'muscle-gain',
+      'endurance': 'maintenance',
+      'general-fitness': 'maintenance',
+      'maintenance': 'maintenance'
+    }
+    return goalMapping[fitnessGoal || 'general-fitness'] || 'maintenance'
   }
 
   const generateNewNutritionPlan = async () => {
@@ -151,8 +167,8 @@ export default function NutritionPage() {
       let workoutGoals = null
       try {
         const workoutResponse = await api.getWorkoutPlans({ limit: 1 })
-        if (workoutResponse.success && workoutResponse.data.plans.length > 0) {
-          const plan = workoutResponse.data.plans[0]
+        if (workoutResponse.success && (workoutResponse.data as any)?.plans?.length > 0) {
+          const plan = (workoutResponse.data as any).plans[0]
           workoutGoals = {
             goal: plan.goal,
             difficulty: plan.difficulty,
@@ -165,14 +181,18 @@ export default function NutritionPage() {
         console.log('No workout plans found, using profile goals')
       }
 
+      // Determine nutrition goal from user's fitness goal
+      const nutritionGoal = mapFitnessGoalToNutritionGoal(user?.profile?.fitnessGoal)
+
       const response = await api.generateNutritionPlan({ 
+        goal: nutritionGoal,
         location,
         workoutGoals,
         includeWorkoutNutrition: true
       })
       
       if (response.success) {
-        setNutritionPlan(response.data.nutritionPlan)
+        setNutritionPlan((response.data as any)?.nutritionPlan)
         toast.success('Personalized nutrition plan generated based on your location and workout goals!')
         // Reload nutrition data
         await loadNutritionData()
