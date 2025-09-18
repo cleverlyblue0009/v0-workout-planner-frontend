@@ -40,6 +40,9 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeSession, setActiveSession] = useState<any>(null)
+  const [todaysWorkout, setTodaysWorkout] = useState<any>(null)
+  const [weekSchedule, setWeekSchedule] = useState<any[]>([])
+  const [workoutPlan, setWorkoutPlan] = useState<any>(null)
 
   const today = new Date()
   const currentMonth = today.toLocaleString("default", { month: "long", year: "numeric" })
@@ -56,16 +59,59 @@ export default function DashboardPage() {
     }
   }, [user])
 
+  const generateScheduleFromPlan = (plan: any) => {
+    if (!plan || !plan.exercises) return
+
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const today = new Date().getDay()
+    const todayName = dayNames[today].toLowerCase()
+
+    // Generate weekly schedule based on the plan
+    const schedule = []
+    const daysPerWeek = plan.schedule?.daysPerWeek || 5
+
+    // Create a weekly schedule
+    const workoutTypes = ['Upper Body Strength', 'HIIT Cardio', 'Lower Body Strength', 'Active Recovery', 'Full Body Circuit', 'Cardio Session', 'Rest Day']
+    
+    for (let i = 0; i < 7; i++) {
+      const dayName = dayNames[i]
+      const isRestDay = i >= daysPerWeek
+      const isToday = i === today
+      
+      if (isToday && !isRestDay) {
+        // Set today's workout from the plan
+        const todayWorkout = {
+          name: plan.exercises[0]?.name || workoutTypes[i % workoutTypes.length],
+          duration: plan.duration || 45,
+          difficulty: plan.difficulty || 'intermediate',
+          exercises: plan.exercises.slice(0, 5) // Take first 5 exercises for today
+        }
+        setTodaysWorkout(todayWorkout)
+      }
+      
+      schedule.push({
+        day: dayName.charAt(0).toUpperCase() + dayName.slice(1),
+        workout: isRestDay ? 'Rest Day' : workoutTypes[i % workoutTypes.length],
+        duration: isRestDay ? '0 min' : `${plan.duration || 45} min`,
+        completed: Math.random() > 0.5 && i < today, // Mock completed status for past days
+        isToday
+      })
+    }
+    
+    setWeekSchedule(schedule)
+  }
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
       
       // Fetch multiple data sources in parallel
-      const [workoutStatsRes, nutritionStatsRes, nutritionLogRes, activeSessionRes] = await Promise.allSettled([
+      const [workoutStatsRes, nutritionStatsRes, nutritionLogRes, activeSessionRes, workoutPlansRes] = await Promise.allSettled([
         api.getWorkoutStats('7d'),
         api.getNutritionStats('7d'),
         api.getNutritionLog(),
-        api.getActiveSession()
+        api.getActiveSession(),
+        api.getWorkoutPlans({ limit: 1 })
       ])
 
       const dashboardStats: DashboardStats = {
@@ -107,6 +153,15 @@ export default function DashboardPage() {
       // Process active workout session
       if (activeSessionRes.status === 'fulfilled' && activeSessionRes.value.success) {
         setActiveSession(activeSessionRes.value.data.session)
+      }
+
+      // Process workout plans
+      if (workoutPlansRes.status === 'fulfilled' && workoutPlansRes.value.success && workoutPlansRes.value.data.plans.length > 0) {
+        const plan = workoutPlansRes.value.data.plans[0]
+        setWorkoutPlan(plan)
+        
+        // Generate today's workout and weekly schedule from the plan
+        generateScheduleFromPlan(plan)
       }
 
       setStats(dashboardStats)
@@ -282,47 +337,93 @@ export default function DashboardPage() {
                 <Calendar className="h-5 w-5" />
                 Today's Schedule
               </span>
-              <Button variant="ghost" size="sm">
-                View All
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+              <Link href="/workouts">
+                <Button variant="ghost" size="sm">
+                  View All
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </Link>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                <Dumbbell className="h-6 w-6 text-primary" />
+            {todaysWorkout ? (
+              <div className="flex items-center gap-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Dumbbell className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">{todaysWorkout.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {todaysWorkout.duration} minutes • {todaysWorkout.difficulty}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">9:00 AM</span>
+                  <Button size="sm" onClick={async () => {
+                    try {
+                      if (workoutPlan) {
+                        await api.startWorkoutSession({
+                          workoutPlanId: workoutPlan._id,
+                          name: todaysWorkout.name
+                        })
+                        // Refresh data to show active session
+                        fetchDashboardData()
+                      }
+                    } catch (error) {
+                      console.error('Failed to start workout:', error)
+                    }
+                  }}>
+                    <Play className="h-4 w-4 mr-1" />
+                    Start
+                  </Button>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">Upper Body Strength</h3>
-                <p className="text-sm text-muted-foreground">45 minutes • Intermediate</p>
+            ) : (
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
+                  <Target className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">No workout scheduled</h3>
+                  <p className="text-sm text-muted-foreground">Create a workout plan to get started</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href="/workouts">
+                    <Button variant="outline" size="sm">
+                      Create Plan
+                    </Button>
+                  </Link>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">9:00 AM</span>
-                <Button size="sm">
-                  <Play className="h-4 w-4 mr-1" />
-                  Start
-                </Button>
-              </div>
-            </div>
+            )}
 
-            <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-              <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center">
-                <Target className="h-6 w-6 text-accent" />
+            {weekSchedule.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">This Week's Schedule</h4>
+                {weekSchedule.slice(0, 3).map((item, index) => (
+                  <div key={index} className={`flex items-center justify-between p-3 rounded-lg ${
+                    item.isToday ? "bg-primary/5 border border-primary/20" : 
+                    item.completed ? "bg-green-50 border border-green-200" : "bg-muted/30"
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      {item.completed ? (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      ) : item.isToday ? (
+                        <div className="w-4 h-4 bg-primary rounded-full" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-muted-foreground rounded-full" />
+                      )}
+                      <div>
+                        <div className="font-medium text-sm">{item.day}</div>
+                        <div className="text-xs text-muted-foreground">{item.workout}</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{item.duration}</div>
+                  </div>
+                ))}
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">Cardio Session</h3>
-                <p className="text-sm text-muted-foreground">30 minutes • Low intensity</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">6:00 PM</span>
-                <Button variant="outline" size="sm">
-                  Schedule
-                </Button>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 

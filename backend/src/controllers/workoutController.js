@@ -256,6 +256,43 @@ const startWorkoutSession = async (req, res) => {
   }
 };
 
+// @desc    Get workout session by ID
+// @route   GET /api/workouts/sessions/:id
+// @access  Private
+const getWorkoutSession = async (req, res) => {
+  try {
+    const session = await WorkoutSession.findOne({
+      _id: req.params.id,
+      userId: req.user.id
+    }).populate('workoutPlanId', 'name description goal difficulty');
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Workout session not found'
+      });
+    }
+
+    // Calculate progress
+    const progress = session.calculateProgress();
+
+    res.json({
+      success: true,
+      data: {
+        session,
+        progress
+      }
+    });
+  } catch (error) {
+    console.error('Get workout session error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error getting workout session',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 // @desc    Get active workout session
 // @route   GET /api/workouts/sessions/active
 // @access  Private
@@ -606,6 +643,7 @@ module.exports = {
   updateWorkoutPlan,
   deleteWorkoutPlan,
   startWorkoutSession,
+  getWorkoutSession,
   getActiveSession,
   updateWorkoutSession,
   completeWorkoutSession,
