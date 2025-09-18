@@ -6,6 +6,7 @@ const {
   updateWorkoutPlan,
   deleteWorkoutPlan,
   startWorkoutSession,
+  getWorkoutSession,
   getActiveSession,
   updateWorkoutSession,
   completeWorkoutSession,
@@ -38,6 +39,7 @@ router.route('/sessions')
 router.get('/sessions/active', getActiveSession);
 
 router.route('/sessions/:id')
+  .get(getWorkoutSession)
   .put(updateWorkoutSession);
 
 router.post('/sessions/:id/complete', completeWorkoutSession);

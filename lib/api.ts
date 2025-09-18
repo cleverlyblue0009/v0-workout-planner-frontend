@@ -135,6 +135,10 @@ class ApiClient {
     });
   }
 
+  async getWorkoutSession(sessionId: string) {
+    return this.request(`/workouts/sessions/${sessionId}`);
+  }
+
   async getActiveSession() {
     return this.request('/workouts/sessions/active');
   }

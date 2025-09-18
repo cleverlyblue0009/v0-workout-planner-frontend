@@ -289,13 +289,30 @@ export default function WorkoutsPage() {
                 <CardTitle>This Week's Schedule</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {[
-                  { day: "Monday", workout: "Upper Body Strength", duration: "45 min", completed: true },
-                  { day: "Tuesday", workout: "HIIT Cardio", duration: "30 min", completed: true },
-                  { day: "Wednesday", workout: "Lower Body Strength", duration: "45 min", completed: false },
-                  { day: "Thursday", workout: "Active Recovery", duration: "20 min", completed: false },
-                  { day: "Friday", workout: "Full Body Circuit", duration: "40 min", completed: false },
-                ].map((item, index) => (
+                {workoutPlan ? 
+                  // Generate schedule from actual workout plan
+                  (() => {
+                    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    const workoutTypes = ['Upper Body Strength', 'HIIT Cardio', 'Lower Body Strength', 'Active Recovery', 'Full Body Circuit']
+                    const daysPerWeek = workoutPlan.schedule?.daysPerWeek || 5
+                    
+                    return dayNames.slice(0, daysPerWeek).map((day, index) => ({
+                      day,
+                      workout: workoutPlan.exercises[index % workoutPlan.exercises.length]?.name || workoutTypes[index % workoutTypes.length],
+                      duration: `${workoutPlan.duration || 45} min`,
+                      completed: Math.random() > 0.6 // Mock completion status
+                    }))
+                  })()
+                  :
+                  // Fallback mock data
+                  [
+                    { day: "Monday", workout: "Upper Body Strength", duration: "45 min", completed: true },
+                    { day: "Tuesday", workout: "HIIT Cardio", duration: "30 min", completed: true },
+                    { day: "Wednesday", workout: "Lower Body Strength", duration: "45 min", completed: false },
+                    { day: "Thursday", workout: "Active Recovery", duration: "20 min", completed: false },
+                    { day: "Friday", workout: "Full Body Circuit", duration: "40 min", completed: false },
+                  ]
+                }.map((item, index) => (
                   <div
                     key={index}
                     className={`flex items-center justify-between p-3 rounded-lg ${
@@ -317,7 +334,26 @@ export default function WorkoutsPage() {
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">{item.duration}</span>
                       {!item.completed && (
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              if (workoutPlan) {
+                                const response = await api.startWorkoutSession({
+                                  workoutPlanId: workoutPlan._id,
+                                  name: item.workout
+                                })
+                                if (response.success) {
+                                  window.location.href = `/workouts/session/${response.data.session._id}`
+                                }
+                              }
+                            } catch (error) {
+                              console.error('Failed to start workout:', error)
+                              toast.error("Failed to start workout session")
+                            }
+                          }}
+                        >
                           <Play className="h-3 w-3" />
                         </Button>
                       )}
@@ -358,7 +394,27 @@ export default function WorkoutsPage() {
                   ))}
                 </div>
 
-                <Button className="w-full" size="lg">
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={async () => {
+                    try {
+                      if (workoutPlan) {
+                        const response = await api.startWorkoutSession({
+                          workoutPlanId: workoutPlan._id,
+                          name: "Lower Body Strength"
+                        })
+                        if (response.success) {
+                          // Navigate to workout session page
+                          window.location.href = `/workouts/session/${response.data.session._id}`
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to start workout:', error)
+                      toast.error("Failed to start workout session")
+                    }
+                  }}
+                >
                   <Play className="h-4 w-4 mr-2" />
                   Start Workout
                 </Button>
@@ -495,7 +551,71 @@ export default function WorkoutsPage() {
                     Strength
                   </Badge>
                 </div>
-                <Button className="w-full">
+                <Button 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      // Create a quick workout plan for this exercise type
+                      const quickPlan = await api.createWorkoutPlan({
+                        name: "Quick Upper Body",
+                        description: "20 minute upper body workout",
+                        goal: "strength",
+                        difficulty: "beginner",
+                        duration: 20,
+                        equipment: "bodyweight",
+                        workoutType: "strength-training",
+                        exercises: [
+                          {
+                            name: "Push-ups",
+                            sets: 3,
+                            reps: { target: 10, min: 8, max: 12 },
+                            restTime: 60,
+                            targetMuscles: ["chest", "triceps", "shoulders"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "Pike Push-ups",
+                            sets: 3,
+                            reps: { target: 8, min: 6, max: 10 },
+                            restTime: 60,
+                            targetMuscles: ["shoulders", "triceps"],
+                            difficulty: "intermediate",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "Tricep Dips",
+                            sets: 3,
+                            reps: { target: 12, min: 10, max: 15 },
+                            restTime: 60,
+                            targetMuscles: ["triceps"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          }
+                        ],
+                        schedule: {
+                          daysPerWeek: 3,
+                          programLength: 4
+                        },
+                        estimatedCaloriesBurn: 150,
+                        isAIGenerated: false
+                      })
+
+                      if (quickPlan.success) {
+                        const session = await api.startWorkoutSession({
+                          workoutPlanId: quickPlan.data.plan._id,
+                          name: "Quick Upper Body"
+                        })
+                        if (session.success) {
+                          window.location.href = `/workouts/session/${session.data.session._id}`
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to start quick workout:', error)
+                      toast.error("Failed to start workout")
+                    }
+                  }}
+                >
                   <Play className="h-4 w-4 mr-2" />
                   Start Now
                 </Button>
@@ -521,7 +641,70 @@ export default function WorkoutsPage() {
                     Cardio
                   </Badge>
                 </div>
-                <Button className="w-full">
+                <Button 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      const quickPlan = await api.createWorkoutPlan({
+                        name: "HIIT Cardio Blast",
+                        description: "15 minute high intensity cardio workout",
+                        goal: "weight-loss",
+                        difficulty: "intermediate",
+                        duration: 15,
+                        equipment: "bodyweight",
+                        workoutType: "hiit",
+                        exercises: [
+                          {
+                            name: "Jumping Jacks",
+                            sets: 3,
+                            duration: 30,
+                            restTime: 30,
+                            targetMuscles: ["full-body", "cardio"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "Burpees",
+                            sets: 3,
+                            reps: { target: 8, min: 5, max: 10 },
+                            restTime: 45,
+                            targetMuscles: ["full-body", "cardio"],
+                            difficulty: "intermediate",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "High Knees",
+                            sets: 3,
+                            duration: 30,
+                            restTime: 30,
+                            targetMuscles: ["cardio", "glutes"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          }
+                        ],
+                        schedule: {
+                          daysPerWeek: 4,
+                          programLength: 6
+                        },
+                        estimatedCaloriesBurn: 200,
+                        isAIGenerated: false
+                      })
+
+                      if (quickPlan.success) {
+                        const session = await api.startWorkoutSession({
+                          workoutPlanId: quickPlan.data.plan._id,
+                          name: "HIIT Cardio Blast"
+                        })
+                        if (session.success) {
+                          window.location.href = `/workouts/session/${session.data.session._id}`
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to start quick workout:', error)
+                      toast.error("Failed to start workout")
+                    }
+                  }}
+                >
                   <Play className="h-4 w-4 mr-2" />
                   Start Now
                 </Button>
@@ -547,7 +730,79 @@ export default function WorkoutsPage() {
                     Core
                   </Badge>
                 </div>
-                <Button className="w-full">
+                <Button 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      const quickPlan = await api.createWorkoutPlan({
+                        name: "Core Strength",
+                        description: "25 minute core strengthening workout",
+                        goal: "strength",
+                        difficulty: "beginner",
+                        duration: 25,
+                        equipment: "bodyweight",
+                        workoutType: "strength-training",
+                        exercises: [
+                          {
+                            name: "Plank",
+                            sets: 3,
+                            duration: 30,
+                            restTime: 45,
+                            targetMuscles: ["abs", "core"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "Bicycle Crunches",
+                            sets: 3,
+                            reps: { target: 20, min: 15, max: 25 },
+                            restTime: 45,
+                            targetMuscles: ["abs", "obliques"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "Russian Twists",
+                            sets: 3,
+                            reps: { target: 15, min: 12, max: 20 },
+                            restTime: 45,
+                            targetMuscles: ["obliques", "abs"],
+                            difficulty: "intermediate",
+                            equipment: "bodyweight"
+                          },
+                          {
+                            name: "Dead Bug",
+                            sets: 3,
+                            reps: { target: 10, min: 8, max: 12 },
+                            restTime: 45,
+                            targetMuscles: ["abs", "lower-back"],
+                            difficulty: "beginner",
+                            equipment: "bodyweight"
+                          }
+                        ],
+                        schedule: {
+                          daysPerWeek: 3,
+                          programLength: 8
+                        },
+                        estimatedCaloriesBurn: 120,
+                        isAIGenerated: false
+                      })
+
+                      if (quickPlan.success) {
+                        const session = await api.startWorkoutSession({
+                          workoutPlanId: quickPlan.data.plan._id,
+                          name: "Core Strength"
+                        })
+                        if (session.success) {
+                          window.location.href = `/workouts/session/${session.data.session._id}`
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to start quick workout:', error)
+                      toast.error("Failed to start workout")
+                    }
+                  }}
+                >
                   <Play className="h-4 w-4 mr-2" />
                   Start Now
                 </Button>
